@@ -1,0 +1,9 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+@tailwind base; @tailwind components; @tailwind utilities;
+body { @apply bg-page text-ink font-sans antialiased; }
+@layer components {
+  .card { @apply rounded-2xl border border-line bg-white shadow-card; }
+  .btn { @apply rounded-xl bg-brand px-4 py-2 font-semibold text-white disabled:opacity-60; }
+  .btn2 { @apply rounded-xl bg-blue-50 px-4 py-2 font-semibold text-brand; }
+  .inp { @apply rounded-xl border border-line bg-white px-3 py-2 outline-brand; }
+}
