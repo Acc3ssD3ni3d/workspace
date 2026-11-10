@@ -65,8 +65,13 @@ export const POST = guard(async (req) => {
 
   const role = body.role === "admin" ? "admin" : "member";
 
-  if (!name) throw new Error("Employee name is required.");
-  if (name.length > 120) throw new Error("Employee name is too long.");
+  if (!name) {
+    throw new Error("Employee name is required.");
+  }
+
+  if (name.length > 120) {
+    throw new Error("Employee name is too long.");
+  }
 
   if (!/^[a-z0-9._-]{2,40}$/.test(local)) {
     throw new Error("Enter a valid company email username.");
@@ -121,15 +126,14 @@ export const POST = guard(async (req) => {
     );
   }
 
-  const loginUrl = new URL("/login", req.url).toString();
-
+  // Send invitation.
+  // Login URL is now generated internally from APP_URL in lib/email.ts.
   try {
     await sendEmployeeInvitation({
       name,
       personalEmail,
       companyEmail: email,
       temporaryPassword,
-      loginUrl,
     });
 
     await User.findByIdAndUpdate(user._id, {
@@ -176,11 +180,15 @@ export const PATCH = guard(async (req, session) => {
   const body = await req.json();
   const id = String(body.id || "").trim();
 
-  if (!id) throw new Error("User ID is required.");
+  if (!id) {
+    throw new Error("User ID is required.");
+  }
 
   const user = await User.findById(id);
 
-  if (!user) throw new Error("User not found.");
+  if (!user) {
+    throw new Error("User not found.");
+  }
 
   const updates: Record<string, unknown> = {};
 
@@ -195,7 +203,8 @@ export const PATCH = guard(async (req, session) => {
     updates.role = body.role;
   }
 
-  // Allows a member to edit the Organisation calendar (admins always can).
+  // Allows a member to edit the Organisation calendar.
+  // Admins always can.
   if (typeof body.orgCalendarEditor === "boolean") {
     updates.orgCalendarEditor = body.orgCalendarEditor;
   }
@@ -233,7 +242,9 @@ export const DELETE = guard(async (req, session) => {
   const body = await req.json();
   const id = String(body.id || "").trim();
 
-  if (!id) throw new Error("User ID is required.");
+  if (!id) {
+    throw new Error("User ID is required.");
+  }
 
   if (id === String(session.sub)) {
     throw new Error("You cannot delete your own administrator account.");
@@ -241,9 +252,12 @@ export const DELETE = guard(async (req, session) => {
 
   const user = await User.findById(id);
 
-  if (!user) throw new Error("User not found.");
+  if (!user) {
+    throw new Error("User not found.");
+  }
 
-  // Delete the mailbox first. If this fails, preserve the workspace account.
+  // Delete the mailbox first.
+  // If this fails, preserve the workspace account.
   if (user.mailboxId) {
     try {
       await deleteHostingerMailbox(String(user.mailboxId));
@@ -256,7 +270,7 @@ export const DELETE = guard(async (req, session) => {
     }
   }
 
-  // Delete the workspace account only after Hostinger accepts deletion.
+  // Delete workspace account after Hostinger accepts deletion.
   try {
     await User.findByIdAndDelete(id);
   } catch (error) {
