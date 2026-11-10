@@ -195,6 +195,11 @@ export const PATCH = guard(async (req, session) => {
     updates.role = body.role;
   }
 
+  // Allows a member to edit the Organisation calendar (admins always can).
+  if (typeof body.orgCalendarEditor === "boolean") {
+    updates.orgCalendarEditor = body.orgCalendarEditor;
+  }
+
   if (body.password !== undefined && body.password !== "") {
     const password = String(body.password);
 

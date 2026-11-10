@@ -30,7 +30,7 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-gradient-to-br from-navy to-[#1f3b9c] p-4">
+    <main className="grid min-h-screen place-items-center bg-page p-4">
       <form onSubmit={submit} className="card w-full max-w-sm space-y-4 p-7">
         <div>
           <h1 className="text-2xl font-extrabold">Set a new password</h1>

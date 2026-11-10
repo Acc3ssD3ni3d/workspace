@@ -9,9 +9,9 @@ export default function Login() {
     if (res.ok) { r.push("/"); r.refresh(); } else { setErr((await res.json()).error); setBusy(false); }
   }
   return (
-    <div className="grid min-h-screen place-items-center bg-gradient-to-br from-navy to-[#1f3b9c] p-4">
+    <div className="grid min-h-screen place-items-center bg-page p-4">
       <form onSubmit={submit} className="card w-full max-w-sm space-y-4 p-7">
-        <div><h1 className="text-2xl font-extrabold">EduOne Workspace</h1><p className="text-muted">Sign in with your company email</p></div>
+        <div><span className="mb-4 grid h-11 w-11 place-items-center rounded-lg bg-brand text-xl font-bold text-white">E</span><h1 className="text-2xl font-extrabold">EduOne Workspace</h1><p className="text-muted">Sign in with your company email</p></div>
         <input name="email" type="email" required placeholder="you@eduoneinternational.com" className="inp w-full" />
         <input name="password" type="password" required placeholder="Password" className="inp w-full" />
         <div className="-mt-2 text-right">

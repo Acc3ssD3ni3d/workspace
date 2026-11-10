@@ -604,6 +604,12 @@ export const PATCH = guard(async (req, s, { params }) => {
 
   const it = await load(Item, params.id, s, sharing ? "owner" : "edit");
 
+  // Files sent in Chat are protected: they cannot be shared, moved or trashed
+  // from Drive. They are removed by deleting the chat message.
+  if (it.chatAttachment) {
+    throw new Error("Files sent in chat are protected and cannot be changed from Drive.");
+  }
+
   const googleFile = isGoogleFile(it);
 
   // Individual Google sharing remains managed directly in Google.

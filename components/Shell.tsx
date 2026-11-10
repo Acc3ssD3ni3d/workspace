@@ -1,10 +1,14 @@
 "use client";
 
+/* ==========================================================================
+   1. IMPORTS
+   ========================================================================== */
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 
 import {
+  LayoutDashboard,
   HardDrive,
   FileText,
   Table2,
@@ -12,69 +16,119 @@ import {
   Video,
   MessageCircle,
   ShieldCheck,
-  Grid3X3,
   LogOut,
   ChevronDown,
+  Menu,
   X,
   Settings,
 } from "lucide-react";
 
 import AdminShell from "./AdminShell";
+import NotificationBell from "./NotificationBell";
+import { NotificationsProvider, useNotifications } from "./NotificationsContext";
 import { UserProvider } from "./UserContext";
 
-const APPS = [
+/* ==========================================================================
+   2. NAVIGATION
+   ========================================================================== */
+const NAV = [
   {
-    name: "Drive",
-    description: "Files and storage",
-    href: "/drive",
-    icon: HardDrive,
-    color: "bg-blue-50 text-blue-600",
+    group: "Workspace",
+    items: [
+      { name: "Overview", href: "/home", icon: LayoutDashboard },
+      { name: "Drive", href: "/drive", icon: HardDrive },
+      { name: "Docs", href: "/docs", icon: FileText },
+      { name: "Sheets", href: "/sheets", icon: Table2 },
+    ],
   },
   {
-    name: "Docs",
-    description: "Documents",
-    href: "/docs",
-    icon: FileText,
-    color: "bg-sky-50 text-sky-600",
-  },
-  {
-    name: "Sheets",
-    description: "Spreadsheets",
-    href: "/sheets",
-    icon: Table2,
-    color: "bg-green-50 text-green-600",
-  },
-  {
-    name: "Calendar",
-    description: "Events and schedules",
-    href: "/calendar",
-    icon: CalendarDays,
-    color: "bg-orange-50 text-orange-600",
-  },
-  {
-    name: "Meet",
-    description: "Video meetings",
-    href: "/meet",
-    icon: Video,
-    color: "bg-red-50 text-red-600",
-  },
-  {
-    name: "Chat",
-    description: "Team communication",
-    href: "/chat",
-    icon: MessageCircle,
-    color: "bg-purple-50 text-purple-600",
-  },
-  {
-    name: "Settings",
-    description: "Account and integrations",
-    href: "/settings",
-    icon: Settings,
-    color: "bg-slate-100 text-slate-700",
+    group: "Collaborate",
+    items: [
+      { name: "Calendar", href: "/calendar", icon: CalendarDays },
+      { name: "Meet", href: "/meet", icon: Video },
+      { name: "Chat", href: "/chat", icon: MessageCircle },
+    ],
   },
 ];
 
-export default function Shell({
+const isActive = (pathname: string, href: string) =>
+  pathname === href || pathname.startsWith(`${href}/`);
+
+/* ==========================================================================
+   3. SIDEBAR
+   ========================================================================== */
+function Sidebar({
+  pathname,
+  admin,
+  onNavigate,
+}: {
+  pathname: string;
+  admin: boolean;
+  onNavigate: () => void;
+}) {
+  const { chatUnread } = useNotifications();
+
+  const link = (href: string, name: string, Icon: any, badge = 0) => {
+    const active = isActive(pathname, href);
+
+    return (
+      <Link
+        key={href}
+        href={href}
+        onClick={onNavigate}
+        className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+          active
+            ? "bg-purple-50 text-purple-700"
+            : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+        }`}
+      >
+        <Icon size={18} strokeWidth={active ? 2.2 : 1.9} />
+        <span className="flex-1">{name}</span>
+        {badge > 0 && <span className="badge">{badge > 99 ? "99+" : badge}</span>}
+      </Link>
+    );
+  };
+
+  return (
+    <div className="flex h-full flex-col">
+      {/* Brand */}
+      <Link href="/home" onClick={onNavigate} className="flex h-[72px] shrink-0 items-center gap-3 border-b border-line px-5">
+        <span className="grid h-9 w-9 place-items-center rounded-lg bg-brand text-lg font-bold text-white">E</span>
+        <span>
+          <span className="block text-[15px] font-bold leading-tight text-slate-900">EduOne</span>
+          <span className="block text-[11px] leading-tight text-slate-500">Workspace</span>
+        </span>
+      </Link>
+
+      {/* Navigation */}
+      <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-5">
+        {NAV.map((section) => (
+          <div key={section.group}>
+            <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              {section.group}
+            </p>
+            <div className="space-y-1">
+              {section.items.map((item) =>
+                link(item.href, item.name, item.icon, item.href === "/chat" ? chatUnread : 0),
+              )}
+            </div>
+          </div>
+        ))}
+      </nav>
+
+      {/* Bottom */}
+      <div className="space-y-1 border-t border-line px-3 py-4">
+        {link("/settings", "Settings", Settings)}
+        {admin && link("/admin", "Admin console", ShieldCheck)}
+      </div>
+    </div>
+  );
+}
+
+/* ==========================================================================
+   4. SHELL
+   ========================================================================== */
+function ShellContent({
   user,
   children,
 }: {
@@ -84,7 +138,7 @@ export default function Shell({
   const pathname = usePathname();
   const router = useRouter();
 
-  const [launcherOpen, setLauncherOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
   const admin = user.role === "admin";
@@ -99,214 +153,142 @@ export default function Shell({
     router.refresh();
   };
 
+  const current =
+    [...NAV.flatMap((s) => s.items), { name: "Settings", href: "/settings" }].find((i) =>
+      isActive(pathname, i.href),
+    )?.name || "Workspace";
+
   return (
-    <div className="min-h-screen bg-[#f8f9fc] text-slate-900">
-      {/* Top Navigation */}
-      <header className="sticky top-0 z-40 flex h-[72px] items-center justify-between border-b border-slate-200 bg-white px-5 sm:px-8">
-        {/* Brand */}
-        <Link href="/" className="flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-blue-600 text-xl font-bold text-white">
-            E
-          </div>
+    <div className="min-h-screen bg-page text-slate-900 lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
+      {/* Mobile overlay */}
+      {drawerOpen && (
+        <button
+          className="fixed inset-0 z-40 bg-slate-950/40 lg:hidden"
+          aria-label="Close menu"
+          onClick={() => setDrawerOpen(false)}
+        />
+      )}
 
-          <div>
-            <h1 className="text-lg font-bold tracking-tight text-slate-900">
-              EduOne Workspace
-            </h1>
-            <p className="text-xs text-slate-500">eduoneinternational.com</p>
-          </div>
-        </Link>
+      {/* Sidebar */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-[248px] border-r border-line bg-white transition-transform lg:sticky lg:top-0 lg:h-screen lg:translate-x-0 ${
+          drawerOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <button
+          onClick={() => setDrawerOpen(false)}
+          className="absolute right-3 top-5 rounded-md p-1 text-slate-400 hover:bg-slate-100 lg:hidden"
+          aria-label="Close menu"
+        >
+          <X size={18} />
+        </button>
+        <Sidebar pathname={pathname} admin={admin} onNavigate={() => setDrawerOpen(false)} />
+      </aside>
 
-        {/* Right Actions */}
-        <div className="flex items-center gap-3">
-          {/* App Launcher */}
-          <div className="relative">
+      <div className="min-w-0">
+        {/* Top bar */}
+        <header className="sticky top-0 z-30 flex h-[72px] items-center justify-between border-b border-line bg-white px-4 sm:px-8">
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => {
-                setLauncherOpen(!launcherOpen);
-                setProfileOpen(false);
-              }}
-              aria-label="Open applications"
-              aria-expanded={launcherOpen}
-              className={`grid h-11 w-11 place-items-center rounded-full transition ${
-                launcherOpen
-                  ? "bg-blue-50 text-blue-600"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
+              onClick={() => setDrawerOpen(true)}
+              className="rounded-lg p-2 text-slate-600 hover:bg-slate-100 lg:hidden"
+              aria-label="Open menu"
             >
-              <Grid3X3 size={23} strokeWidth={1.8} />
+              <Menu size={21} />
             </button>
+            <h1 className="text-base font-semibold text-slate-900">{current}</h1>
+          </div>
 
-            {launcherOpen && (
-              <>
-                <button
-                  className="fixed inset-0 z-40 cursor-default"
-                  aria-label="Close applications"
-                  onClick={() => setLauncherOpen(false)}
-                />
+          <div className="flex items-center gap-2">
+            <NotificationBell />
 
-                <div className="absolute right-0 top-14 z-50 w-[320px] rounded-2xl border border-slate-200 bg-white p-5 shadow-xl sm:w-[370px]">
-                  <div className="mb-5 flex items-center justify-between">
-                    <div>
-                      <h3 className="font-semibold text-slate-900">
-                        Your applications
-                      </h3>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Everything you need for work
-                      </p>
+            {/* Profile */}
+            <div className="relative">
+              <button
+                onClick={() => setProfileOpen(!profileOpen)}
+                className="flex items-center gap-2 rounded-lg p-1.5 transition hover:bg-slate-100"
+                aria-label="Account menu"
+                aria-expanded={profileOpen}
+              >
+                <span className="grid h-9 w-9 place-items-center rounded-full bg-purple-100 text-sm font-bold text-purple-700">
+                  {user.name.slice(0, 2).toUpperCase()}
+                </span>
+                <span className="hidden text-left sm:block">
+                  <span className="block text-sm font-semibold leading-tight text-slate-800">{user.name}</span>
+                  <span className="block text-[11px] leading-tight text-slate-500">
+                    {admin ? "Administrator" : "Member"}
+                  </span>
+                </span>
+                <ChevronDown size={15} className="hidden text-slate-400 sm:block" />
+              </button>
+
+              {profileOpen && (
+                <>
+                  <button
+                    className="fixed inset-0 z-40 cursor-default"
+                    aria-label="Close account menu"
+                    onClick={() => setProfileOpen(false)}
+                  />
+
+                  <div className="absolute right-0 top-12 z-50 w-60 rounded-xl border border-line bg-white p-2 shadow-lg">
+                    <div className="mb-2 border-b border-slate-100 px-3 pb-3 pt-2">
+                      <p className="font-semibold text-slate-900">{user.name}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">eduoneinternational.com</p>
                     </div>
-
-                    <button
-                      onClick={() => setLauncherOpen(false)}
-                      className="rounded-full p-2 text-slate-400 hover:bg-slate-100"
-                      aria-label="Close launcher"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3">
-                    {APPS.map((app) => {
-                      const Icon = app.icon;
-                      const active =
-                        pathname === app.href ||
-                        pathname.startsWith(`${app.href}/`);
-
-                      return (
-                        <Link
-                          key={app.href}
-                          href={app.href}
-                          onClick={() => setLauncherOpen(false)}
-                          className={`flex flex-col items-center rounded-xl p-3 text-center transition hover:bg-slate-50 ${
-                            active ? "bg-blue-50" : ""
-                          }`}
-                        >
-                          <div
-                            className={`mb-2 grid h-12 w-12 place-items-center rounded-2xl ${app.color}`}
-                          >
-                            <Icon size={24} strokeWidth={1.8} />
-                          </div>
-
-                          <span className="text-sm font-semibold text-slate-800">
-                            {app.name}
-                          </span>
-
-                          <span className="mt-1 text-[10px] text-slate-400">
-                            {app.description}
-                          </span>
-                        </Link>
-                      );
-                    })}
 
                     {admin && (
                       <Link
                         href="/admin"
-                        onClick={() => setLauncherOpen(false)}
-                        className="flex flex-col items-center rounded-xl p-3 text-center transition hover:bg-slate-50"
+                        onClick={() => setProfileOpen(false)}
+                        className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
                       >
-                        <div className="mb-2 grid h-12 w-12 place-items-center rounded-2xl bg-indigo-50 text-indigo-600">
-                          <ShieldCheck size={24} />
-                        </div>
-
-                        <span className="text-sm font-semibold text-slate-800">
-                          Admin
-                        </span>
-
-                        <span className="mt-1 text-[10px] text-slate-400">
-                          Manage workspace
-                        </span>
+                        <ShieldCheck size={17} />
+                        Admin console
                       </Link>
                     )}
-                  </div>
 
-                  <div className="mt-5 border-t border-slate-100 pt-4 text-center">
-                    <p className="text-xs text-slate-400">EduOne Workspace</p>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Profile */}
-          <div className="relative">
-            <button
-              onClick={() => {
-                setProfileOpen(!profileOpen);
-                setLauncherOpen(false);
-              }}
-              className="flex items-center gap-2 rounded-full p-1.5 transition hover:bg-slate-100"
-              aria-label="Account menu"
-              aria-expanded={profileOpen}
-            >
-              <span className="grid h-10 w-10 place-items-center rounded-full bg-blue-600 text-sm font-bold text-white">
-                {user.name.slice(0, 2).toUpperCase()}
-              </span>
-
-              <ChevronDown
-                size={16}
-                className="hidden text-slate-500 sm:block"
-              />
-            </button>
-
-            {profileOpen && (
-              <>
-                <button
-                  className="fixed inset-0 z-40 cursor-default"
-                  aria-label="Close account menu"
-                  onClick={() => setProfileOpen(false)}
-                />
-
-                <div className="absolute right-0 top-14 z-50 w-64 rounded-xl border border-slate-200 bg-white p-4 shadow-xl">
-                  <div className="mb-4 border-b border-slate-100 pb-4">
-                    <p className="font-semibold text-slate-900">{user.name}</p>
-
-                    <p className="mt-1 text-xs text-slate-500">
-                      {admin ? "Administrator" : "Workspace Member"}
-                    </p>
-
-                    <p className="mt-1 break-all text-xs text-slate-400">
-                      eduoneinternational.com
-                    </p>
-                  </div>
-
-                  {admin && (
                     <Link
-                      href="/admin"
+                      href="/settings"
                       onClick={() => setProfileOpen(false)}
-                      className="mb-2 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+                      className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
                     >
-                      <ShieldCheck size={18} />
-                      Admin Console
+                      <Settings size={17} />
+                      Settings
                     </Link>
-                  )}
 
-                  <Link
-                    href="/settings"
-                    onClick={() => setProfileOpen(false)}
-                    className="mb-2 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
-                  >
-                    <Settings size={18} />
-                    Settings
-                  </Link>
-
-                  <button
-                    onClick={logout}
-                    className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-red-600 hover:bg-red-50"
-                  >
-                    <LogOut size={18} />
-                    Sign out
-                  </button>
-                </div>
-              </>
-            )}
+                    <button
+                      onClick={logout}
+                      className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      <LogOut size={17} />
+                      Sign out
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Application Content */}
-      <main className="mx-auto min-h-[calc(100vh-72px)] w-full max-w-[1600px] p-5 sm:p-8 lg:p-10">
-        <UserProvider user={user}>{children}</UserProvider>
-      </main>
+        {/* Page content */}
+        <main className="mx-auto min-h-[calc(100vh-72px)] w-full max-w-[1600px] p-5 sm:p-8 lg:p-10">
+          <UserProvider user={user}>{children}</UserProvider>
+        </main>
+      </div>
     </div>
+  );
+}
+
+export default function Shell({
+  user,
+  children,
+}: {
+  user: { name: string; role: string };
+  children: React.ReactNode;
+}) {
+  return (
+    <NotificationsProvider>
+      <ShellContent user={user}>{children}</ShellContent>
+    </NotificationsProvider>
   );
 }

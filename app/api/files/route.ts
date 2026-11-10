@@ -1,5 +1,5 @@
 import { guard, J } from "@/lib/http";
-import { Item } from "@/lib/models";
+import { Item, User } from "@/lib/models";
 import { load, roleOf } from "@/lib/perm";
 import { QUOTA } from "@/lib/config";
 
@@ -27,45 +27,51 @@ export const GET = guard(async (req, s) => {
   const view = u.searchParams.get("view") || "mine";
   const parent = u.searchParams.get("parent") || null;
 
+  // Files sent in Chat are protected and never listed in Drive.
+  const visible = { trashed: false, chatAttachment: { $ne: true } };
+
   let q: any;
 
   if (view === "trash") {
-    q = {
-      owner: s.sub,
-      trashed: true,
-    };
-  } else if (view === "shared" && !parent) {
-    q = {
-      owner: { $ne: s.sub },
-      trashed: false,
-      $or: [{ "shared.user": s.sub }, { org: { $in: ["view", "edit"] } }],
-    };
+    // TRASH: only my own deleted items.
+    q = { owner: s.sub, trashed: true, chatAttachment: { $ne: true } };
+  } else if (parent) {
+    // INSIDE A FOLDER: everything in it that I am allowed to open.
+    await load(Item, parent, s);
+    q = { parent, ...visible };
+  } else if (view === "shared") {
+    // SHARED WITH ME: only items another person shared with me directly.
+    q = { ...visible, owner: { $ne: s.sub }, "shared.user": s.sub };
   } else {
-    if (parent) {
-      await load(Item, parent, s);
-    }
-
-    q =
-      view === "shared"
-        ? {
-            parent,
-            trashed: false,
-          }
-        : {
-            owner: s.sub,
-            parent,
-            trashed: false,
-          };
+    // MY DRIVE: my own files + files other people made public to the organisation.
+    q = {
+      ...visible,
+      $or: [
+        { owner: s.sub, parent: null },
+        { owner: { $ne: s.sub }, org: { $in: ["view", "edit"] } },
+      ],
+    };
   }
 
   const items = await Item.find(q).sort({ type: -1, name: 1 }).lean();
 
+  // Names of the people who own items that are not mine.
+  const otherOwners = [
+    ...new Set(items.filter((i: any) => String(i.owner) !== String(s.sub)).map((i: any) => String(i.owner))),
+  ];
+  const owners: any[] = otherOwners.length
+    ? await User.find({ _id: { $in: otherOwners } }).select("name").lean()
+    : [];
+  const ownerName = new Map(owners.map((o) => [String(o._id), o.name]));
+
   // Resolve permissions concurrently rather than waiting for one folder lookup
   // at a time for every row in the directory.
   const [out, used] = await Promise.all([
-    Promise.all(items.map(async (item) => ({
+    Promise.all(items.map(async (item: any) => ({
       ...item,
       role: await roleOf(item, s),
+      isMine: String(item.owner) === String(s.sub),
+      ownerName: ownerName.get(String(item.owner)) || "",
       googleFileId: item.googleFileId || "",
       googleWebViewLink: item.googleWebViewLink || "",
       googleResourceType: item.googleResourceType || "",

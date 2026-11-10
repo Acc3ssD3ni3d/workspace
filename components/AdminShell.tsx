@@ -15,6 +15,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { useState } from "react";
+import NotificationBell from "./NotificationBell";
 
 const NAV = [
   { label: "Overview", href: "/admin", icon: LayoutDashboard },
@@ -155,6 +156,8 @@ export default function AdminShell({ user, children }: AdminShellProps) {
           </div>
 
           <div className="flex items-center gap-3">
+            <NotificationBell />
+
             <div className="hidden text-right sm:block">
               <p className="text-sm font-semibold text-slate-800">
                 {user.name}

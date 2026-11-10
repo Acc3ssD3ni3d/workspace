@@ -70,6 +70,13 @@ const userSchema = new Schema(
       default: true,
     },
 
+    // Employees with this flag can edit the Organisation calendar.
+    // Administrators can always edit it, so the flag only matters for members.
+    orgCalendarEditor: {
+      type: Boolean,
+      default: false,
+    },
+
     // Existing mailbox integration
     mailboxId: {
       type: String,
@@ -244,6 +251,14 @@ const itemSchema = new Schema(
     trashed: {
       type: Boolean,
       default: false,
+    },
+
+    // Files uploaded from Chat. They are hidden from Drive listings and
+    // can only be downloaded by members of the chat they were sent in.
+    chatAttachment: {
+      type: Boolean,
+      default: false,
+      index: true,
     },
 
     // Individual employee permissions
@@ -497,9 +512,43 @@ const eventSchema = new Schema(
       default: "scheduled",
       index: true,
     },
+
+    // personal = only the creator sees it.
+    // org      = Organisation calendar (legacy events without a value are org).
+    scope: {
+      type: String,
+      enum: ["personal", "org"],
+      default: "org",
+      index: true,
+    },
+
+    // event   = calendar entry.
+    // meeting = created from the Meet page (shown to the people invited).
+    kind: {
+      type: String,
+      enum: ["event", "meeting"],
+      default: "event",
+    },
+
+    // everyone = all active members.
+    // selected = only the creator and the people in `audience`.
+    // private  = only the creator.
+    visibility: {
+      type: String,
+      enum: ["everyone", "selected", "private"],
+      default: "everyone",
+    },
+
+    audience: {
+      type: [{ type: Schema.Types.ObjectId, ref: "User" }],
+      default: [],
+      index: true,
+    },
   },
   { timestamps: true },
 );
+
+eventSchema.index({ scope: 1, organizerUser: 1, start: 1 });
 
 export const Event = models.Event || model("Event", eventSchema);
 
@@ -532,11 +581,106 @@ const messageSchema = new Schema(
       type: String,
       default: "",
     },
+
+    // Files sent in this message (stored as hidden Drive items).
+    attachments: {
+      type: [
+        {
+          _id: false,
+          item: { type: Schema.Types.ObjectId, ref: "Item" },
+          name: String,
+          mime: String,
+          size: Number,
+
+          // upload = protected file sent from the computer (hidden from Drive)
+          // drive  = an existing Drive file that was attached
+          source: {
+            type: String,
+            enum: ["upload", "drive"],
+            default: "upload",
+          },
+        },
+      ],
+      default: [],
+    },
   },
   { timestamps: true },
 );
 
+messageSchema.index({ "attachments.item": 1 });
+
 export const Message = models.Message || model("Message", messageSchema);
+
+// ------------------------------------
+// CHAT GROUPS
+// channel id used by messages = "group:<groupId>"
+// ------------------------------------
+
+const chatGroupSchema = new Schema(
+  {
+    name: {
+      type: String,
+      trim: true,
+      required: true,
+      maxlength: 80,
+    },
+
+    members: {
+      type: [{ type: Schema.Types.ObjectId, ref: "User" }],
+      default: [],
+      index: true,
+    },
+
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+  },
+  { timestamps: true },
+);
+
+export const ChatGroup =
+  models.ChatGroup || model("ChatGroup", chatGroupSchema);
+
+// ------------------------------------
+// IN-APP NOTIFICATIONS
+// `key` groups repeated notifications (for example every unread message
+// of one chat is one notification with a counter).
+// ------------------------------------
+
+const notificationSchema = new Schema({
+  user: {
+    type: Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+    index: true,
+  },
+
+  type: {
+    type: String,
+    enum: ["calendar", "meeting", "chat", "system"],
+    default: "system",
+  },
+
+  title: { type: String, default: "" },
+  body: { type: String, default: "" },
+  link: { type: String, default: "" },
+
+  key: { type: String, default: "", index: true },
+  count: { type: Number, default: 1 },
+  read: { type: Boolean, default: false, index: true },
+
+  createdAt: { type: Date, default: Date.now, index: true },
+});
+
+notificationSchema.index({ user: 1, read: 1, createdAt: -1 });
+
+// Notifications older than 60 days are removed automatically.
+notificationSchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 * 86400 });
+
+export const Notification =
+  models.Notification || model("Notification", notificationSchema);
 
 // ------------------------------------
 // GOOGLE ACCOUNT CONNECTION

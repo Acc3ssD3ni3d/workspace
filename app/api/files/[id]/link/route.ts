@@ -10,6 +10,10 @@ import { load } from "@/lib/perm";
 export const POST = guard(async (req, s, { params }) => {
   const it = await load(Item, params.id, s, "owner");
 
+  if (it.chatAttachment) {
+    throw new Error("Files sent in chat are protected and cannot get a sharing link.");
+  }
+
   if (it.type !== "file") {
     throw new Error("Sharing links are available for files only.");
   }

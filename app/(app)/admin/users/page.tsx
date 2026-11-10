@@ -15,6 +15,7 @@ import {
   AlertCircle,
   Clock,
   Trash2,
+  CalendarDays,
 } from "lucide-react";
 
 type User = {
@@ -24,6 +25,7 @@ type User = {
   personalEmail?: string;
   role: "admin" | "member";
   active: boolean;
+  orgCalendarEditor?: boolean;
   mailboxId?: string;
   mailboxStatus?: "pending" | "active" | "failed" | "not_created";
   invitationStatus?: "pending" | "sent" | "failed";
@@ -223,6 +225,23 @@ export default function UsersPage() {
     }
 
     updateUser(user._id, { role: nextRole });
+  };
+
+  // Gives or removes access to edit the Organisation calendar.
+  const toggleCalendarEditor = (user: User) => {
+    const next = !user.orgCalendarEditor;
+
+    if (
+      !confirm(
+        next
+          ? `Allow ${user.name} to edit the Organisation calendar?`
+          : `Remove Organisation calendar editing from ${user.name}?`,
+      )
+    ) {
+      return;
+    }
+
+    updateUser(user._id, { orgCalendarEditor: next });
   };
 
   const deleteUser = async (user: User) => {
@@ -511,6 +530,11 @@ export default function UsersPage() {
                           {user.role === "admin" ? "Admin" : "Member"}
                         </span>
                       </span>
+                      {user.role !== "admin" && user.orgCalendarEditor && (
+                        <span className="mt-1 block truncate text-[10px] font-semibold text-blue-600">
+                          Calendar editor
+                        </span>
+                      )}
                     </td>
 
                     <td className="px-2 py-3">
@@ -556,6 +580,24 @@ export default function UsersPage() {
                         >
                           <ShieldCheck size={14} />
                         </button>
+
+                        {user.role !== "admin" && (
+                          <button
+                            title={
+                              user.orgCalendarEditor
+                                ? "Remove Organisation calendar editor"
+                                : "Allow Organisation calendar editing"
+                            }
+                            onClick={() => toggleCalendarEditor(user)}
+                            className={`rounded-lg border p-1.5 ${
+                              user.orgCalendarEditor
+                                ? "border-blue-200 bg-blue-50 text-blue-600"
+                                : "border-slate-200 text-slate-600 hover:bg-blue-50 hover:text-blue-600"
+                            }`}
+                          >
+                            <CalendarDays size={14} />
+                          </button>
+                        )}
 
                         <button
                           title="Delete employee"
@@ -618,6 +660,11 @@ export default function UsersPage() {
                   <span className="rounded-full bg-slate-100 px-2.5 py-1">
                     {user.role === "admin" ? "Administrator" : "Member"}
                   </span>
+                  {user.role !== "admin" && user.orgCalendarEditor && (
+                    <span className="rounded-full bg-blue-50 px-2.5 py-1 text-blue-700">
+                      Calendar editor
+                    </span>
+                  )}
                   <span
                     className={`rounded-full px-2.5 py-1 ${
                       user.active
@@ -658,6 +705,21 @@ export default function UsersPage() {
                   >
                     <ShieldCheck size={15} />
                   </button>
+
+                  {user.role !== "admin" && (
+                    <button
+                      onClick={() => toggleCalendarEditor(user)}
+                      className={`rounded-lg border p-2 ${
+                        user.orgCalendarEditor
+                          ? "border-blue-200 bg-blue-50 text-blue-600"
+                          : "border-slate-200 text-slate-600"
+                      }`}
+                      title="Organisation calendar editor"
+                      aria-label="Organisation calendar editor"
+                    >
+                      <CalendarDays size={15} />
+                    </button>
+                  )}
 
                   <button
                     onClick={() => deleteUser(user)}

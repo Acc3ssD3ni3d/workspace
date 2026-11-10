@@ -56,6 +56,14 @@ export default function SettingsPage() {
 
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
+  // Personal email states
+  const [workspaceEmail, setWorkspaceEmail] = useState("");
+  const [personalEmail, setPersonalEmail] = useState("");
+  const [savedPersonalEmail, setSavedPersonalEmail] = useState("");
+  const [savingEmail, setSavingEmail] = useState(false);
+  const [emailError, setEmailError] = useState("");
+  const [emailSuccess, setEmailSuccess] = useState("");
+
   const loadConnection = useCallback(async () => {
     setLoading(true);
     setError("");
@@ -73,6 +81,42 @@ export default function SettingsPage() {
       setLoading(false);
     }
   }, []);
+
+  // Loads the signed-in user's company email and personal email.
+  useEffect(() => {
+    api("/api/account/profile")
+      .then((profile) => {
+        setWorkspaceEmail(profile.email || "");
+        setPersonalEmail(profile.personalEmail || "");
+        setSavedPersonalEmail(profile.personalEmail || "");
+      })
+      .catch(() => {});
+  }, []);
+
+  const savePersonalEmail = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+
+    setEmailError("");
+    setEmailSuccess("");
+    setSavingEmail(true);
+
+    try {
+      const result = await api("/api/account/profile", {
+        method: "PATCH",
+        body: { personalEmail },
+      });
+
+      setPersonalEmail(result.personalEmail || "");
+      setSavedPersonalEmail(result.personalEmail || "");
+      setEmailSuccess(result.message || "Personal email saved.");
+    } catch (err) {
+      setEmailError(
+        err instanceof Error ? err.message : "Unable to save personal email.",
+      );
+    } finally {
+      setSavingEmail(false);
+    }
+  };
 
   useEffect(() => {
     void loadConnection();
@@ -298,7 +342,66 @@ export default function SettingsPage() {
               Authenticated Workspace account
             </div>
           </div>
+
+          {workspaceEmail && (
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                Company email
+              </p>
+              <p className="mt-2 break-all font-medium text-slate-800">
+                {workspaceEmail}
+              </p>
+            </div>
+          )}
         </div>
+
+        {/* Personal email */}
+        <form
+          onSubmit={savePersonalEmail}
+          className="border-t border-slate-100 p-5 sm:p-6"
+        >
+          <label
+            htmlFor="personal-email"
+            className="mb-2 block text-sm font-medium text-slate-700"
+          >
+            Personal email
+          </label>
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <input
+              id="personal-email"
+              type="email"
+              value={personalEmail}
+              onChange={(e) => setPersonalEmail(e.target.value)}
+              placeholder="yourname@gmail.com"
+              autoComplete="email"
+              disabled={savingEmail}
+              className="inp min-w-0 flex-1"
+            />
+
+            <button
+              type="submit"
+              disabled={savingEmail || personalEmail.trim() === savedPersonalEmail}
+              className="btn"
+            >
+              {savingEmail ? "Saving..." : "Save email"}
+            </button>
+          </div>
+
+          <p className="mt-2 text-xs text-slate-500">
+            Used for password reset links and for calendar and meeting
+            notification emails. Employees receive one when an admin onboards
+            them. Administrators can add their own here.
+          </p>
+
+          {emailSuccess && (
+            <p className="mt-3 text-sm font-medium text-green-700">{emailSuccess}</p>
+          )}
+
+          {emailError && (
+            <p className="mt-3 text-sm font-medium text-red-600">{emailError}</p>
+          )}
+        </form>
       </section>
 
       {/* Change Password */}

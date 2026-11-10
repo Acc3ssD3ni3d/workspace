@@ -530,7 +530,7 @@ export default function WorkspaceOverview() {
 
   /* ---------- Render ---------- */
   return (
-    <div className="min-h-screen bg-[#f8f9fc] text-slate-900">
+    <div className="min-h-screen bg-page text-slate-900">
       {/* ==============================
           TOP NAVIGATION (SHELL NAVBAR)
           ============================== */}

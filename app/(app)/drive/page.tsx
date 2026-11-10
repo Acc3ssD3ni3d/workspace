@@ -33,6 +33,7 @@ import {
   Info,
   Globe,
   Lock,
+  CalendarDays,
 } from "lucide-react";
 
 import { api, sizeFmt } from "@/lib/client";
@@ -54,6 +55,8 @@ type DriveItem = {
   uploaded: number;
   role?: string;
   org?: "none" | "view" | "edit";
+  isMine?: boolean;
+  ownerName?: string;
   createdAt?: string;
   updatedAt?: string;
 
@@ -86,18 +89,12 @@ const getFileIcon = (item: DriveItem) => {
 };
 
 const getFileColor = (item: DriveItem) => {
-  if (item.type === "folder") return "bg-amber-50 text-amber-600";
-  if (item.mime?.startsWith("image/")) return "bg-purple-50 text-purple-600";
-  if (item.mime?.startsWith("video/")) return "bg-pink-50 text-pink-600";
-  if (item.mime?.startsWith("audio/")) return "bg-orange-50 text-orange-600";
+  if (item.type === "folder") return "bg-orange-50 text-orange-600";
   if (item.mime?.includes("pdf")) return "bg-red-50 text-red-600";
   if (item.mime?.includes("spreadsheet") || item.mime === WORKSPACE_SHEET) {
     return "bg-green-50 text-green-600";
   }
-  if (item.mime === WORKSPACE_DOC) {
-    return "bg-blue-50 text-blue-600";
-  }
-  return "bg-blue-50 text-blue-600";
+  return "bg-purple-50 text-purple-600";
 };
 
 /**
@@ -170,6 +167,14 @@ export default function Drive() {
 
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
+  // ------------------------------------
+  // SMART MONTH FOLDER
+  // On first open the Drive jumps into  <current year> / <current month>.
+  // `smartReady` keeps the first load waiting so My Drive does not flash.
+  // ------------------------------------
+  const [smartReady, setSmartReady] = useState(false);
+  const smartStarted = useRef(false);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const parent = path.at(-1)?._id || "";
 
@@ -218,8 +223,30 @@ export default function Drive() {
   }, [view, parent]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    if (smartReady) load();
+  }, [load, smartReady]);
+
+  // Opens the folder of the month that is running now (creates the
+  // year / month structure first when it does not exist yet).
+  const openCurrentMonth = useCallback(async () => {
+    try {
+      const result = await api("/api/files/structure", { method: "POST" });
+
+      if (result?.year && result?.month) {
+        setView("mine");
+        setPath([result.year, result.month] as DriveItem[]);
+      }
+    } catch {
+      // The normal Drive keeps working even if the structure call fails.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (smartStarted.current) return;
+    smartStarted.current = true;
+
+    openCurrentMonth().finally(() => setSmartReady(true));
+  }, [openCurrentMonth]);
 
   const updateUpload = (id: string, changes: Partial<UploadItem>) => {
     setUploads((current) =>
@@ -414,6 +441,47 @@ export default function Drive() {
     }
   }
 
+  // ------------------------------------
+  // EMPTY TRASH / RESTORE ALL
+  // ------------------------------------
+  async function emptyTrash() {
+    if (
+      !confirm(
+        `Permanently delete everything in your trash (${items.length} item${items.length === 1 ? "" : "s"})? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const result = await api("/api/files/trash", { method: "DELETE" });
+
+      if (result.failed?.length) {
+        setError(
+          `Some items could not be deleted: ${result.failed.slice(0, 3).join("; ")}`,
+        );
+      }
+    } catch (e: any) {
+      setError(e.message || "Unable to empty trash.");
+    }
+
+    await load();
+  }
+
+  async function restoreAll() {
+    try {
+      await api("/api/files/trash", {
+        method: "PATCH",
+        body: { restore: true },
+      });
+      await load();
+    } catch (e: any) {
+      setError(e.message || "Unable to restore items.");
+    }
+  }
+
   function openItem(item: DriveItem) {
     if (item.type === "folder") {
       setPath((current) => [...current, item]);
@@ -519,11 +587,19 @@ export default function Drive() {
           </div>
 
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-            My Drive
+            {view === "shared"
+              ? "Shared with me"
+              : view === "trash"
+                ? "Trash"
+                : "My Drive"}
           </h1>
 
           <p className="mt-1 text-sm text-slate-500">
-            Your files, folders and shared documents in one place.
+            {view === "shared"
+              ? "Files and folders other people shared directly with you."
+              : view === "trash"
+                ? "Items you deleted. Empty the trash to remove them for good."
+                : "Your files plus files colleagues made public to the organisation."}
           </p>
         </div>
 
@@ -556,6 +632,26 @@ export default function Drive() {
                   e.target.value = "";
                 }}
               />
+            </>
+          )}
+
+          {view === "trash" && items.length > 0 && (
+            <>
+              <button
+                onClick={restoreAll}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+              >
+                <RotateCcw size={17} />
+                Restore all
+              </button>
+
+              <button
+                onClick={emptyTrash}
+                className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700"
+              >
+                <Trash2 size={17} />
+                Empty trash
+              </button>
             </>
           )}
 
@@ -670,6 +766,20 @@ export default function Drive() {
                   ? "Trash"
                   : "My Drive"}
             </button>
+
+            {view === "mine" && (
+              <button
+                onClick={() => {
+                  closeMenu();
+                  openCurrentMonth();
+                }}
+                className="ml-1 inline-flex items-center gap-1.5 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-600 hover:bg-blue-100"
+                title="Open the folder of the current month"
+              >
+                <CalendarDays size={13} />
+                This month
+              </button>
+            )}
 
             {path.map((folder, index) => (
               <span key={folder._id} className="flex items-center gap-2">
@@ -894,7 +1004,9 @@ export default function Drive() {
                     ? "Try another search term."
                     : view === "trash"
                       ? "Deleted items will appear here."
-                      : "Upload files or create a folder to get started."}
+                      : view === "shared"
+                        ? "Files colleagues share with you directly will appear here."
+                        : "Upload files or create a folder to get started."}
                 </p>
 
                 {!search && view !== "trash" && (
@@ -976,6 +1088,15 @@ export default function Drive() {
                                   : "Google Sheets spreadsheet"
                                 : sizeFmt(item.size)}
                           </p>
+
+                          {item.isMine === false && item.ownerName && (
+                            <p className="mt-0.5 truncate text-[11px] font-medium text-orange-600">
+                              {item.org && item.org !== "none" && view !== "shared"
+                                ? "Public"
+                                : "Shared"}{" "}
+                              by {item.ownerName}
+                            </p>
+                          )}
                         </div>
                       </button>
 
