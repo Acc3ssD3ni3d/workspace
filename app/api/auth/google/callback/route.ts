@@ -4,12 +4,13 @@ import { google } from "googleapis";
 import { getSession } from "@/lib/auth";
 import { connectDB } from "@/lib/db";
 import { GoogleConnection, User } from "@/lib/models";
-import { getGoogleOAuthClient } from "@/lib/google-oauth";
+import { getGoogleOAuthClient, getAppUrl } from "@/lib/google-oauth";
 import { encryptGoogleToken } from "@/lib/google-crypto";
 
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
+  // Clear OAuth state cookie.
   const clearStateCookie = (response: NextResponse) => {
     response.cookies.set("google_oauth_state", "", {
       httpOnly: true,
@@ -22,64 +23,55 @@ export async function GET(request: NextRequest) {
     return response;
   };
 
+  // Always redirect using APP_URL, never request.url.
+  const redirectToApp = (path: string) => {
+    return clearStateCookie(NextResponse.redirect(getAppUrl(path)));
+  };
+
   try {
-    // 1. Verify existing Workspace login
+    // 1. Verify existing Workspace login.
     const session = await getSession();
 
     if (!session) {
-      return clearStateCookie(
-        NextResponse.redirect(
-          new URL("/login?error=workspace_session_expired", request.url),
-        ),
-      );
+      return redirectToApp("/login?error=workspace_session_expired");
     }
 
     const params = request.nextUrl.searchParams;
 
-    // 2. Handle Google authorization cancellation/errors
+    // 2. Handle Google authorization cancellation/errors.
     const googleError = params.get("error");
 
     if (googleError) {
-      return clearStateCookie(
-        NextResponse.redirect(
-          new URL(
-            `/?google=error&reason=${encodeURIComponent(googleError)}`,
-            request.url,
-          ),
-        ),
+      return redirectToApp(
+        `/settings?google=error&reason=${encodeURIComponent(googleError)}`,
       );
     }
 
     const code = params.get("code");
     const returnedState = params.get("state");
+
     const savedState = request.cookies.get("google_oauth_state")?.value;
 
-    // 3. Verify OAuth state
+    // 3. Verify OAuth state.
     if (
       !code ||
       !returnedState ||
       !savedState ||
       returnedState !== savedState
     ) {
-      return clearStateCookie(
-        NextResponse.redirect(new URL("/?google=invalid_state", request.url)),
-      );
+      return redirectToApp("/settings?google=invalid_state");
     }
 
     await connectDB();
 
-    // 4. Verify employee account
+    // 4. Verify employee account.
     const user = await User.findById(session.sub).select("_id active email");
 
     if (!user || !user.active) {
-      return clearStateCookie(
-        NextResponse.redirect(
-          new URL("/?google=account_unavailable", request.url),
-        ),
-      );
+      return redirectToApp("/settings?google=account_unavailable");
     }
 
-    // 5. Exchange authorization code for tokens
+    // 5. Exchange authorization code for tokens.
     const client = getGoogleOAuthClient();
 
     const { tokens } = await client.getToken(code);
@@ -90,7 +82,7 @@ export async function GET(request: NextRequest) {
 
     client.setCredentials(tokens);
 
-    // 6. Retrieve connected Google account
+    // 6. Retrieve connected Google account.
     const oauth2 = google.oauth2({
       version: "v2",
       auth: client,
@@ -102,7 +94,7 @@ export async function GET(request: NextRequest) {
       throw new Error("Unable to retrieve Google account information.");
     }
 
-    // 7. Preserve existing refresh token when Google
+    // 7. Preserve existing refresh token if Google
     // does not return a new one.
     const existing = await GoogleConnection.findOne({
       user: session.sub,
@@ -125,9 +117,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 8. Save encrypted Google credentials
+    // 8. Save encrypted Google credentials.
     await GoogleConnection.findOneAndUpdate(
-      { user: session.sub },
+      {
+        user: session.sub,
+      },
       {
         $set: update,
       },
@@ -138,15 +132,11 @@ export async function GET(request: NextRequest) {
       },
     );
 
-    // 9. Return employee to Workspace
-    return clearStateCookie(
-      NextResponse.redirect(new URL("/?google=connected", request.url)),
-    );
+    // 9. Redirect employee to Settings after successful connection.
+    return redirectToApp("/settings?google=connected");
   } catch (error) {
     console.error("Google OAuth callback error:", error);
 
-    return clearStateCookie(
-      NextResponse.redirect(new URL("/?google=connection_failed", request.url)),
-    );
+    return redirectToApp("/settings?google=connection_failed");
   }
 }
